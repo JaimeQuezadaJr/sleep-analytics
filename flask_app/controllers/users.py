@@ -70,3 +70,86 @@ def register():
         user_id = user.User.save_user(data)
         session['user_id'] = user_id
     return redirect("/dashboard")
+
+    @app.route('/update_profile/<int:id>', methods = ['POST'])
+def update_profile(id):
+    if not user.User.validate_edit_user(request.form):
+        return redirect(f'/user/edit/{id}')
+    if 'profile_pic' not in request.files:
+        flash('No file part in form.', 'update')
+        return redirect(f"/user/edit/{id}")
+    file = request.files['profile_pic']
+    # If the user does not select a file, the browser submits an
+    # empty file without a filename.
+    if file.filename == '':
+        flash('No file uploaded.', 'update')
+        return redirect(f"/user/edit/{id}")
+    # If invalid file type of photo
+    if not allowed_file(file.filename):
+        flash("File type is incorrect. Only .png, .jpg, .jpeg, .gif files allowed", 'update')
+        return redirect(f"/user/edit/{id}")
+    if file and allowed_file(file.filename):
+        filename = secure_filename(file.filename)
+        print(os.path.join(app.root_path,'static','images', filename))
+        # Save the file itself in the /static/images folder
+        file.save(os.path.join(app.root_path,'static','images', filename)) 
+    data = {
+            "id": id,
+            "first_name": request.form['first_name'],
+            "last_name": request.form['last_name'],
+            "city": request.form['city'],
+            "state": request.form['state'],
+            "profile_pic": filename
+        }
+    user.User.edit_user(data)
+    return redirect("/dashboard")
+
+@app.route('/login', methods = ['POST'])
+def login():
+    data = {
+        "email": request.form['email']
+    }
+    user_in_db = user.User.get_user_by_email(data)
+    if not user_in_db:
+        flash("Invalid Email/Password", "login")
+        return redirect('/login_page')
+    if not bcrypt.check_password_hash(user_in_db.password, request.form['password']):
+        flash("Invalid Email/Password", "login")
+        return redirect('/login_page')
+    session['user_id'] = user_in_db.id
+    return redirect('/dashboard')
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
+
+@app.route('/dashboard')
+def dashboard(): 
+    if 'user_id' in session:
+        data = {
+            "id": session['user_id']
+        }
+        return render_template('dashboard.html', user = user.User.get_user_by_id(data), memories = memory.Memory.get_all_memories_with_users(), all_users = user.User.get_all_users())
+    else:
+        flash("Must login!", "login")
+        return redirect('/')
+
+@app.route('/profile/<int:id>')
+def profile(id):
+    if 'user_id' in session:
+        data = {
+            "id": session['user_id']
+        }
+        return render_template('profile.html', user = user.User.get_user_by_id(data), memories = memory.Memory.get_all_memories_with_users(), all_users = user.User.get_all_users())
+    else:
+        flash("Must login!", "login")
+        return redirect('/')
+
+@app.route('/delete/user/<int:id>')
+def delete_user(id):
+    data = {
+        'id':id
+    }
+    user.User.delete_user(data)
+    return redirect('/logout')
